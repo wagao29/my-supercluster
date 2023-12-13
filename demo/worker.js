@@ -38,3 +38,7 @@ function generateGeoJSONPoints(numPoints) {
   }
   return geoJsonPoints;
 }
+
+console.log = (...args) => {
+  postMessage({ log: args });
+};

@@ -14,10 +14,13 @@ const markers = L.geoJson(null, {
 const worker = new Worker("worker.js");
 let ready = false;
 
+const logContainer = document.getElementById("log-container");
 const pointsSelect = document.getElementById("points-select");
+
 pointsSelect.onchange = (e) => {
   if (ready) {
     ready = false;
+    logContainer.textContent = "";
     worker.postMessage({
       numPoints: e.target.value,
     });
@@ -32,6 +35,9 @@ worker.onmessage = function (e) {
   if (e.data.ready) {
     ready = true;
     update();
+  } else if (e.data.log) {
+    logContainer.textContent += `${e.data.log}\n`;
+    console.log(...e.data.log);
   } else {
     markers.clearLayers();
     markers.addData(e.data);
