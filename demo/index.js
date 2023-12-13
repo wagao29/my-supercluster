@@ -14,6 +14,20 @@ const markers = L.geoJson(null, {
 const worker = new Worker("worker.js");
 let ready = false;
 
+const pointsSelect = document.getElementById("points-select");
+pointsSelect.onchange = (e) => {
+  if (ready) {
+    ready = false;
+    worker.postMessage({
+      numPoints: e.target.value,
+    });
+  }
+};
+
+worker.postMessage({
+  numPoints: 100,
+});
+
 worker.onmessage = function (e) {
   if (e.data.ready) {
     ready = true;

@@ -22,10 +22,24 @@
         height: 100%;
         margin: 0;
       }
+      #points-select {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 1000;
+      }
     </style>
   </head>
   <body>
     <div id="map"></div>
+    <select id="points-select" name="points">
+      <option value="100">100 points</option>
+      <option value="500">500 points</option>
+      <option value="1000">1,000 points</option>
+      <option value="5000">5,000 points</option>
+      <option value="10000">10,000 points</option>
+      <option value="30000">30,000 points</option>
+    </select>
     <script src="index.js"></script>
   </body>
 </html>

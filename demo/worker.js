@@ -2,45 +2,39 @@
 
 importScripts("../dist/index.js");
 
-const now = Date.now();
-
 let index;
 
-getJSON("../test/fixtures/places.json", (geojson) => {
-  console.log(
-    `loaded ${geojson.features.length} points JSON in ${
-      (Date.now() - now) / 1000
-    }s`
-  );
-
-  index = new Supercluster({
-    log: true,
-    radius: 60,
-    extent: 256,
-    maxZoom: 17,
-  }).load(geojson.features);
-
-  postMessage({ ready: true });
-});
-
-self.onmessage = function (e) {
-  postMessage(index.getClusters(e.data.bbox, e.data.zoom));
+const option = {
+  log: true,
+  radius: 60,
+  extent: 256,
+  maxZoom: 17,
 };
 
-function getJSON(url, callback) {
-  const xhr = new XMLHttpRequest();
-  xhr.open("GET", url, true);
-  xhr.responseType = "json";
-  xhr.setRequestHeader("Accept", "application/json");
-  xhr.onload = function () {
-    if (
-      xhr.readyState === 4 &&
-      xhr.status >= 200 &&
-      xhr.status < 300 &&
-      xhr.response
-    ) {
-      callback(xhr.response);
-    }
-  };
-  xhr.send();
+self.onmessage = function (e) {
+  if (e.data.numPoints) {
+    index = new Supercluster(option).load(
+      generateGeoJSONPoints(e.data.numPoints)
+    );
+    postMessage({ ready: true });
+  } else {
+    postMessage(index.getClusters(e.data.bbox, e.data.zoom));
+  }
+};
+
+function generateGeoJSONPoints(numPoints) {
+  const geoJsonPoints = [];
+  for (let i = 0; i < numPoints; i++) {
+    const json = {
+      type: "Feature",
+      id: i,
+      properties: {},
+      geometry: {
+        type: "Point",
+        coordinates: [Math.random() * 360 - 180, Math.random() * 180 - 90],
+      },
+    };
+    geoJsonPoints.push(json);
+  }
+  return geoJsonPoints;
 }
