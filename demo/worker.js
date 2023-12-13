@@ -1,6 +1,6 @@
 /*global importScripts Supercluster */
 
-importScripts("../dist/index.js");
+importScripts("./index.js");
 
 let index;
 
