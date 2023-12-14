@@ -20,6 +20,7 @@ const pointsSelect = document.getElementById("points-select");
 pointsSelect.onchange = (e) => {
   if (ready) {
     ready = false;
+    pointsSelect.disabled = true;
     logContainer.textContent = "";
     worker.postMessage({
       numPoints: e.target.value,
@@ -34,6 +35,7 @@ worker.postMessage({
 worker.onmessage = function (e) {
   if (e.data.ready) {
     ready = true;
+    pointsSelect.disabled = false;
     update();
   } else if (e.data.log) {
     logContainer.textContent += `${e.data.log}\n`;
