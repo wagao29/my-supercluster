@@ -83,7 +83,7 @@ class Supercluster {
   load(points: GeoJSONPoint[]) {
     const { log, minZoom, maxZoom } = this.options;
 
-    const totalNow = +Date.now();
+    const loadStart = +Date.now();
 
     this.points = points;
 
@@ -108,6 +108,11 @@ class Supercluster {
 
     let tree = (this.trees[maxZoom + 1] = new Tree(clusters));
 
+    if (log)
+      console.log(
+        `prepare ${points.length} points in ${+Date.now() - loadStart}ms`
+      );
+
     for (let z = maxZoom; z >= minZoom; z--) {
       const now = +Date.now();
 
@@ -119,7 +124,7 @@ class Supercluster {
         );
     }
 
-    if (log) console.log(`total: ${+Date.now() - totalNow}ms`);
+    if (log) console.log(`total: ${+Date.now() - loadStart}ms`);
 
     return this;
   }
