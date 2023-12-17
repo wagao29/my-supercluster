@@ -3,7 +3,7 @@ type Cluster = {
   y: number;
   lastVisitedZoom: number;
   originalIndex: number;
-  parentClusterId: number;
+  clusterId: number;
   numPoints: number;
 };
 
@@ -35,49 +35,14 @@ const defaultOptions = {
   log: false,
 };
 
-class Tree {
-  clusters: Cluster[];
-
-  constructor(clusters: Cluster[]) {
-    this.clusters = clusters;
-  }
-
-  within(x: number, y: number, r: number): number[] {
-    const res = [];
-    for (let i = 0; i < this.clusters.length; i++) {
-      const dx = this.clusters[i].x - x;
-      const dy = this.clusters[i].y - y;
-      if (dx * dx + dy * dy <= r * r) {
-        res.push(i);
-      }
-    }
-    return res;
-  }
-
-  range(minX: number, minY: number, maxX: number, maxY: number): number[] {
-    const res = [];
-    for (let i = 0; i < this.clusters.length; i++) {
-      if (
-        this.clusters[i].x >= minX &&
-        this.clusters[i].y >= minY &&
-        this.clusters[i].x <= maxX &&
-        this.clusters[i].y <= maxY
-      ) {
-        res.push(i);
-      }
-    }
-    return res;
-  }
-}
-
 class Supercluster {
   options: Options;
-  trees: Tree[];
+  data: Cluster[][];
   points: GeoJSONPoint[] = [];
 
   constructor(options: Options) {
     this.options = Object.assign(Object.create(defaultOptions), options);
-    this.trees = new Array(this.options.maxZoom + 1);
+    this.data = new Array(this.options.maxZoom + 1);
   }
 
   load(points: GeoJSONPoint[]) {
@@ -101,12 +66,12 @@ class Supercluster {
         y,
         lastVisitedZoom: Infinity,
         originalIndex: i,
-        parentClusterId: -1,
+        clusterId: -1,
         numPoints: 1,
       });
     }
 
-    let tree = (this.trees[maxZoom + 1] = new Tree(clusters));
+    this.data[maxZoom + 1] = clusters;
 
     if (log)
       console.log(
@@ -116,11 +81,11 @@ class Supercluster {
     for (let z = maxZoom; z >= minZoom; z--) {
       const now = +Date.now();
 
-      tree = this.trees[z] = new Tree(this._cluster(tree, z));
+      this.data[z] = this._cluster(clusters, z);
 
       if (log)
         console.log(
-          `z${z}: ${tree.clusters.length} clusters in ${+Date.now() - now}ms`
+          `z${z}: ${this.data[z].length} clusters in ${+Date.now() - now}ms`
         );
     }
 
@@ -145,23 +110,29 @@ class Supercluster {
       return easternHem.concat(westernHem);
     }
 
-    const tree = this.trees[this._limitZoom(zoom)];
-    const ids = tree.range(
+    const clusters = this.data[this._limitZoom(zoom)];
+    const [minX, minY, maxX, maxY] = [
       lngX(minLng),
       latY(maxLat),
       lngX(maxLng),
-      latY(minLat)
-    );
-    const clusters = tree.clusters;
-    const res = [];
-    for (const id of ids) {
-      res.push(
-        clusters[id].numPoints > 1
-          ? getClusterJSON(clusters[id])
-          : this.points[clusters[id].originalIndex]
-      );
+      latY(minLat),
+    ];
+    const geoJsonPoints = [];
+    for (let i = 0; i < clusters.length; i++) {
+      if (
+        clusters[i].x >= minX &&
+        clusters[i].y >= minY &&
+        clusters[i].x <= maxX &&
+        clusters[i].y <= maxY
+      ) {
+        geoJsonPoints.push(
+          clusters[i].numPoints > 1
+            ? getClusterJSON(clusters[i])
+            : this.points[clusters[i].originalIndex]
+        );
+      }
     }
-    return res;
+    return geoJsonPoints;
   }
 
   _limitZoom(z: number) {
@@ -171,11 +142,10 @@ class Supercluster {
     );
   }
 
-  _cluster(tree: Tree, zoom: number): Cluster[] {
+  _cluster(clusters: Cluster[], zoom: number): Cluster[] {
     const { radius, extent, minPoints } = this.options;
 
     const r = radius / (extent * Math.pow(2, zoom));
-    const clusters = tree.clusters;
     const nextClusters: Cluster[] = [];
 
     for (let i = 0; i < clusters.length; i++) {
@@ -184,14 +154,19 @@ class Supercluster {
 
       const x = clusters[i].x;
       const y = clusters[i].y;
-      const neighborIds = tree.within(clusters[i].x, clusters[i].y, r);
 
       const numPointsOrigin = clusters[i].numPoints;
       let numPoints = numPointsOrigin;
 
-      for (const neighborId of neighborIds) {
-        if (clusters[neighborId].lastVisitedZoom > zoom) {
-          numPoints += clusters[neighborId].numPoints;
+      const withinIds = [];
+      for (let j = 0; j < clusters.length; j++) {
+        const dx = clusters[j].x - x;
+        const dy = clusters[j].y - y;
+        if (dx * dx + dy * dy <= r * r) {
+          withinIds.push(j);
+          if (clusters[j].lastVisitedZoom > zoom) {
+            numPoints += clusters[j].numPoints;
+          }
         }
       }
 
@@ -201,35 +176,32 @@ class Supercluster {
 
         const id = ((i | 0) << 5) + (zoom + 1) + this.points.length;
 
-        for (const neighborId of neighborIds) {
-          if (clusters[neighborId].lastVisitedZoom <= zoom) continue;
-          clusters[neighborId].lastVisitedZoom = zoom;
-
-          const numPoints2 = clusters[neighborId].numPoints;
-          wx += clusters[neighborId].x * numPoints2;
-          wy += clusters[neighborId].y * numPoints2;
-
-          clusters[neighborId].parentClusterId = id;
+        for (const withinId of withinIds) {
+          if (clusters[withinId].lastVisitedZoom <= zoom) continue;
+          clusters[withinId].lastVisitedZoom = zoom;
+          clusters[withinId].clusterId = id;
+          wx += clusters[withinId].x * clusters[withinId].numPoints;
+          wy += clusters[withinId].y * clusters[withinId].numPoints;
         }
 
-        clusters[i].parentClusterId = id;
+        clusters[i].clusterId = id;
 
         nextClusters.push({
           x: wx / numPoints,
           y: wy / numPoints,
           lastVisitedZoom: Infinity,
           originalIndex: id,
-          parentClusterId: -1,
+          clusterId: -1,
           numPoints,
         });
       } else {
         nextClusters.push(clusters[i]);
 
         if (numPoints > 1) {
-          for (const neighborId of neighborIds) {
-            if (clusters[neighborId].lastVisitedZoom <= zoom) continue;
-            clusters[neighborId].lastVisitedZoom = zoom;
-            nextClusters.push(clusters[neighborId]);
+          for (const withinId of withinIds) {
+            if (clusters[withinId].lastVisitedZoom <= zoom) continue;
+            clusters[withinId].lastVisitedZoom = zoom;
+            nextClusters.push(clusters[withinId]);
           }
         }
       }
@@ -242,7 +214,7 @@ class Supercluster {
 function getClusterJSON(cluster: Cluster): GeoJSONPoint {
   return {
     type: "Feature",
-    id: cluster.parentClusterId,
+    id: cluster.clusterId,
     properties: getClusterProperties(cluster),
     geometry: {
       type: "Point",
@@ -261,7 +233,7 @@ function getClusterProperties(cluster: Cluster): any {
         : count;
   return {
     cluster: true,
-    cluster_id: cluster.parentClusterId,
+    cluster_id: cluster.clusterId,
     point_count: count,
     point_count_abbreviated: abbrev,
   };
